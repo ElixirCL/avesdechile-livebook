@@ -1,0 +1,173 @@
+# Interacción con API Rest
+
+```elixir
+Mix.install([
+  {:req, "~> 0.5.6"},
+  {:kino, "~> 0.14.0"}
+])
+```
+
+## Métodos HTTP
+
+Revisar los capítulos del Libro Elixir FullStack:
+
+* [¿Qué es una URL?](https://elixircl.github.io/elixir-fullstack/#_qu%C3%A9_es_una_url)
+* [Protocolo HTTP](https://elixircl.github.io/elixir-fullstack/#_http)
+* [HTTP y JSON](https://elixircl.github.io/elixir-fullstack/#_http_json_y_apis)
+
+## Aves de Chile
+
+El Proyecto Explora CONICYT de Valoración y Divulgación de la Ciencia y la Tecnología junto al
+Centro de Gestión Ambiental - FAVET le han solicitado elaborar un buscador de aves de Chile. Para esto le han proporcionado una _API Rest_ que contiene información de las aves.
+
+### Trabajo
+
+Utilizando las herramientas [Req](https://github.com/wojtekmach/req) y [Kino](https://github.com/livebook-dev/kino) debe elaborar un buscador de las aves de Chile.
+
+### Objetivos de Aprendizaje
+
+* Aprender cómo realizar llamadas HTTP GET con Elixir.
+* Aprender a usar mapas JSON.
+
+### Pasos
+
+1. Obtener información de las aves disponibles al endpoint https://aves.ninjas.cl/api/birds (Usando `Req.get!`).
+2. Solicitar al usuario el ave a buscar mediante un `Kino.Input.text` y `Kino.Input.read`.
+3. Llamar al endpoint para obtener información específica del ave. Para esto se debe buscar entre los nombres del ave y entregar su URL. Ejemplo: Buscar "Aguilucho Chico" entrega la URL https://aves.ninjas.cl/api/birds/76-buteo-albigula. Para esto se puede usar las funciones `Enum.map`, `Enum.filter` y `get_in`. Puede apoyarse también en las funciones de `String.downcase`, `String.split` y la interpolación de strings con `#{}`.
+4. Mostrar los datos del ave usando `Kino.Layout.grid`.
+5. Si el ave no se encuentra, mostrar mensaje "Ave No Encontrada".
+6. Si hay más de un resultado. Mostrar todas las aves encontradas.
+
+## Buscador de Aves
+
+El resultado final debe mostrar:
+
+* Nombre en Español (Título)
+* Nombre en Latin (Subtítulo)
+* Descripción (Si es que existe)
+* Imagen principal
+
+**Ejemplo**
+
+![Ejemplo](https://github.com/user-attachments/assets/6662fd80-67ef-4621-a4ee-c78f38be1155)
+
+## Obtener datos de Aves Disponibles
+
+```elixir
+response = Req.get!("https://aves.ninjas.cl/api/birds")
+aves = response.body
+```
+
+## Ingresar Ave a Buscar
+
+```elixir
+buscador = Kino.Input.text("Buscar Ave")
+```
+
+## Filtrar Aves y Entregar la URL
+
+<details>
+<summary>Super Tip</summary>
+
+Podemos buscar si un texto existe dentro de un String utilizando `in` y `split`. Combinado con `Enum.filter` se puede filtrar los resultados.
+
+```elixir
+buscar = "Camilo"
+|> String.downcase()
+
+palabras = "Hola como estas Camilo"
+|> String.downcase()
+|> String.split()
+
+# true
+buscar in palabras
+ 
+```
+</details>
+
+<!-- livebook:{"break_markdown":true} -->
+
+<details>
+<summary>Super Tip 2</summary>
+
+La función `get_in` nos permite obtener datos anidados dentro de un mapa.
+
+```elixir
+datos = %{
+  "name" => %{
+    "english" => "Mi Nombre"
+  }
+}
+
+get_in(datos, ["name", "english"])
+```
+</details>
+
+```elixir
+busqueda =
+  Kino.Input.read(buscador)
+  |> String.downcase()
+  |> String.trim()
+
+resultados =
+  Enum.map(aves, fn ave ->
+    {
+      "#{get_in(ave, ["name", "english"])} #{get_in(ave, ["name", "spanish"])} #{get_in(ave, ["name", "latin"])}"
+      |> String.downcase()
+      |> String.trim()
+      |> String.split(),
+      get_in(ave, ["_links", "self"])
+    }
+  end)
+  |> Enum.filter(fn {nombres, _url} -> busqueda in nombres end)
+```
+
+## Mostrar Las Aves Encontradas
+
+<details>
+<summary>Super Tip</summary>
+
+Se puede usar `Kino.Layout.grid` y `Kino.Markdown.new` para elaborar el resultado.
+Más detalles en [Intro to Kino](https://github.com/livebook-dev/livebook/blob/main/lib/livebook/notebook/learn/kino/intro_to_kino.livemd).
+
+```elixir
+ Enum.map(resultados, fn url_ave -> 
+      Kino.Layout.grid([
+        Kino.Markdown.new("# Título"), 
+        Kino.Markdown.new("## Subtítulo"),
+        Kino.Markdown.new("Párrafo"),
+        Kino.Markdown.new("![Titulo Imagen](URL Imagen)")
+      ], boxed: true)
+    end)
+|> Kino.Layout.grid(columns: 2)
+```
+
+</details>
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+case resultados do
+  [] ->
+    "Ave No Encontrada"
+
+  aves ->
+    Enum.map(aves, fn {_, url} ->
+      resultado = Req.get!(url)
+      ave = resultado.body
+
+      Kino.Layout.grid(
+        [
+          Kino.Markdown.new("# #{get_in(ave, ["name", "spanish"])}"),
+          Kino.Markdown.new("## #{get_in(ave, ["name", "latin"])}"),
+          Kino.Markdown.new("#{get_in(ave, ["iucn", "description"])}"),
+          Kino.Markdown.new(
+            "![#{get_in(ave, ["name", "spanish"])}](#{get_in(ave, ["images", "main"])})"
+          )
+        ],
+        boxed: true
+      )
+    end)
+    |> Kino.Layout.grid(columns: 2)
+end
+```
